@@ -1,0 +1,126 @@
+---
+# Source: meme-database/templates/main.yaml
+# Load the schema.sql file
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: "demo-database-schema"
+data:
+  schema.sql:     CREATE TABLE l_count (
+        num_ls BIGINT
+    );
+    
+    INSERT INTO l_count (num_ls) VALUES (0);
+---
+# Source: meme-database/templates/main.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: "demo-database"
+  labels:
+    app: "demo-database"
+spec:
+  type: ClusterIP
+  ports:
+    - port: 5432
+      targetPort: 5432
+  selector:
+    app: "demo-database"
+---
+# Source: meme-database/templates/main.yaml
+apiVersion: v1
+kind: Service
+metadata:
+  name: "demo-client"
+  labels:
+    app: "demo-client"
+spec:
+  type: NodePort
+  ports:
+    - port: 8080
+      targetPort: 8080
+      nodePort: 30080
+  selector:
+    app: "demo-client"
+---
+# Source: meme-database/templates/main.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: "demo-database"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: "demo-database"
+  template:
+    metadata:
+      annotations:
+        operator.1password.io/inject: "demo-database"
+      labels:
+        app: "demo-database"
+    spec:
+      containers:
+        - name: "demo-database"
+          image: "postgres:17"
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 5432
+          env:
+            - name: POSTGRES_USER
+              value: "postgres"
+            - name: POSTGRES_PASSWORD
+              value: "postgres"
+          volumeMounts:
+            - mountPath: /docker-entrypoint-initdb.d/
+              name: schema-volume
+          resources:
+            requests:
+              memory: "512Mi"
+              cpu: "250m"
+            limits:
+              memory: "1Gi"
+              cpu: "500m"
+
+      volumes:
+        - name: schema-volume
+          configMap:
+            name: "demo-database-schema"
+---
+# Source: meme-database/templates/main.yaml
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: "demo-client"
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: "demo-client"
+  template:
+    metadata:
+      annotations:
+        operator.1password.io/inject: "demo-client"
+      labels:
+        app: "demo-client"
+    spec:
+      containers:
+        - name: "demo-client"
+          image: "ghcr.io/asteurer/dixie-tech-demo"
+          imagePullPolicy: Always
+          ports:
+            - containerPort: 8080
+          env:
+            - name: DATABASE_URL
+              value: "postgres://postgres:postgres@demo-database.default.svc.cluster.local:5432/postgres?sslmode=disable"
+            - name: POD_IP # Retrieving the pod's IP address from the Downward API
+              valueFrom:
+                fieldRef:
+                  fieldPath: status.podIP
+          resources:
+            requests:
+              memory: "128Mi"
+              cpu: "100m"
+            limits:
+              memory: "256Mi"
+              cpu: "500m"

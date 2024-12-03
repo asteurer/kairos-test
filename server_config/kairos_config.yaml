@@ -1,0 +1,16 @@
+#cloud-config
+hostname: master-node
+
+k3s:
+    enabled: true
+    args:
+        - "--tls-san {{ .IPAddress }}" # This allows kubectl to operate outside the node
+
+fail_on_bundles_errors: true
+
+bundles:
+    - targets:
+        - run://ghcr.io/asteurer/kairos-test-bundle
+
+example:
+    enable: true
